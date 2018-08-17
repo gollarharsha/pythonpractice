@@ -1,0 +1,171 @@
+from netmiko import ConnectHandler
+from getpass import getpass
+import datetime
+
+alarm = input("Enter the Alarm: ")
+alarms = alarm.split("Core: ")
+split_alarms = alarms[1].split(" ")
+print(split_alarms)
+device = split_alarms[0]
+interface = split_alarms[1]
+print(device, interface)
+username = input("Enter Username: ")
+device1 = {
+                    'host':device,
+                      'device_type' :'juniper',
+                        'username' : username,
+                          'password' : getpass()
+            }
+net_connect = ConnectHandler(**device1)
+extensive_output = net_connect.send_command("show interfaces " + interface + " extensive | match " + '"' + "last|local|phy|desc|error" + '"')
+
+local_output = net_connect.send_command("show interfaces " + interface + " extensive | match local")
+
+locals_output = local_output.split('Local:')
+local_address = locals_output[1].split(',')[0]
+
+arp_output = net_connect.send_command("show arp interface " + interface + " no-resolve")
+arps_output=arp_output.split(' ')
+destination_address= arps_output[23]
+ping_output = net_connect.send_command("ping " + destination_address + " source " + local_address + " rapid count 100 size 8972 bypass-routing do-not-fragment")
+
+last_flap_output = net_connect.send_command("show interfaces " + interface + " extensive | match " + "last")
+flaps_duration = last_flap_output.split(' ')
+flappy = flaps_duration[10].strip("(") + " " +  flaps_duration[11]
+
+desc_output = net_connect.send_command("show interfaces " + interface + " descriptions")
+descriptions_output = desc_output.split(' ')
+other_end_device = descriptions_output[25]
+isis_adj_output = net_connect.send_command("show isis adjacency extensive " + other_end_device + " | find " + interface )
+
+bfd_output = net_connect.send_command("show bfd session | match " + interface)
+bfds_output = bfd_output.split (' ')
+bfd_address = bfds_output[0].strip("\n")
+bfd_exten_output = net_connect.send_command("show bfd session address " + bfd_address + " extensive")
+bfd_session_down_time = bfd_exten_output.split()
+l = bfd_session_down_time.index("Session")
+bfd_dtime =' '.join(bfd_session_down_time[l:l+5])
+final_bfd_down = bfd_dtime.rstrip(',')
+
+
+now = datetime.datetime.now()
+today = now.strftime("%Y-%m-%d")
+log_output = net_connect.send_command("show log default-log-messages | match " + interface + " | except " + interface + ".0" + " | match " + today)
+
+lightlevel_rp = net_connect.send_command("show interface diagnostics optics " + interface + " | match power | except " + '"' + "output|off" + '"')
+
+ll = lightlevel_rp.splitlines()
+ll1 = ll[:-2]
+ll1.pop(0)
+final_ll1 = []
+
+for line in ll1:
+    final_ll1.append(line.split('/')[1].rstrip('dBm'))
+
+a = float(final_ll1[0])
+b = float(final_ll1[1])
+c = float(final_ll1[2])
+d = float(final_ll1[3])
+e = float(final_ll1[4])
+
+
+lightlevel_op = net_connect.send_command("show interface diagnostics optics " + interface + " | match output | except off")
+
+ll2 = lightlevel_op.splitlines()
+ll3 = ll2[:-2]
+ll3.pop(0)
+final_ll2 = []
+
+for line in ll3:
+    final_ll2.append(line.split('/')[1].rstrip('dBm'))
+
+f = float(final_ll2[0])
+g = float(final_ll2[1])
+h = float(final_ll2[2])
+i = float(final_ll2[3])
+j = float(final_ll2[4])
+
+'''isis_output = net_connect.send_command("show configuration protocols isis interface " + interface)
+ mpls_output = net_connect.send_command("show configuration protocols mpls interface " + interface)
+ rsvp_output = net_connect.send_command("show rsvp interface " + interface + ".0")
+ op_output = net_connect.send_command("op show-lsp-interface-router interface " + interface + ".0")'''
+
+print("Observations")
+
+all_time = []
+all_dur= []
+count = 0
+loglines = log_output.splitlines()
+line1 = loglines[:-2]
+line1.pop(0)
+
+for line in line1:
+    count = count + 1
+    line_string = line.split(" ")[1].split("T")[1].split(".")[0]
+               #line_string = line.split(" "1].split("T")[1].split(".")[0]
+                   #print(line_string)
+    all_time.append(line_string)
+print("Total number of flaps on " , today,  " are ", count/2)
+
+pair1 = all_time[::2]
+pair2 = all_time[1::2]
+
+total = len(pair1)
+for i in range(total):
+    tdelta1 = int(pair2[i].split(":")[0]) - int(pair1[i].split(":")[0])
+    tdelta2 = int(pair2[i].split(":")[1]) - int(pair1[i].split(":")[1])
+    tdelta3 = int(pair2[i].split(":")[2]) - int(pair1[i].split(":")[2])
+    tdelta = str(tdelta1) + ":" + str(tdelta2) + ":" + str(tdelta3)
+    all_dur.append(tdelta)
+
+n = 1
+for n in range(int(count/2)):
+    print("Flap" , n , " happened at ",  pair1[n], " PDT" , " with a duration of " , all_dur[n], " H:M:S")
+print("Last flap of Link was at :" + flaps_duration[7] + " " + flaps_duration[8] + " " + flaps_duration[9])
+print("Link has been stable from " + flappy + " hours.")
+print("BFD ", final_bfd_down)
+print("Received power is ",a)
+print("Output power is ", f)
+print("\n")
+
+print("Pre-Check commands")
+print(username + "@" + device + ">" + " show interfaces " + interface + " extensive | match " + '"' + "local|last|phy|desc|error" + '"')
+print(extensive_output)
+
+print("\n")
+print(username + "@" + device + ">" + "ping " + destination_address + " source " + local_address + " rapid count 100 size 8972 bypass-routing do-not-fragment")
+print(ping_output)
+print(username + "@" + device + ">" +  " show isis adjacency extensive " +other_end_device + " | find " + interface)
+print(isis_adj_output)
+
+print("\n")
+print(username + "@" + device + ">" + " show bfd session | match " + interface)
+print(bfd_output)
+
+print("\n")
+print(username + "@" + device + ">" + "show bfd session address " +bfd_address + " extensive")
+print(bfd_exten_output)
+
+print("\n")
+print(username + "@" + device + ">" + "show interface diagnostics optics " + interface + " match power | except " + '"' + "output|off" + '"')
+print(lightlevel_rp)
+print(username + "@" + device + ">" + "show interface diagnostics optics " + interface + " match output | except off")
+print(lightlevel_op)
+
+''' print("************************************************************************")
+ print("Cost-Check Commands")
+ print(username + "@" + device + ">" + " show configuration protocols isis interface " + interface)
+ print(isis_output)
+
+ print(username + "@" + device + ">" + " show configuration protocols mpls interface " + interface)
+ print(mpls_output)
+
+ print(username + "@" + device + ">" + " show rsvp interface " + interface + ".0")
+ print(rsvp_output)
+
+ print(username + "@" + device + ">" + " op show-lsp-interface-router interface " + interface + ".0")
+ print(op_output)'''
+
+print(username + "@" + device + ">" + "show default-log-messages | match " + interface + " | except " + interface + ".0" + " | match " + today)
+print(log_output)
+net_connect.disconnect()

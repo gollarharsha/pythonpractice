@@ -1,0 +1,32 @@
+from netmiko import ConnectHandler
+from getpass import getpass
+
+alarm = input("Enter the Alarm: ")
+alarms = alarm.split(' ')
+
+if "Core:" in alarms:
+    alarm_list = alarm.split(' ')
+    ind = alarm_list.index("Core:")
+    device = alarm_list[ind + 1]
+    interface = alarm_list[ind + 2]
+    print(device, interface)
+    username = input("Enter Username: ")
+    device1 = {
+            'host':device,
+            'device_type' :'juniper',
+            'username' : username,
+            'password' : getpass()
+             }
+    net_connect = ConnectHandler(**device1)
+    isis_output= net_connect.send_command("show configuration protocols isis interface " + interface)
+    mpls_output= net_connect.send_command("show configuration protocols mpls interface " + interface)
+    rsvp_output=net_connect.send_command("show rsvp interface " + interface + ".0")
+    print("show configuration protocols isis interface " + interface)
+    print(isis_output)
+
+    print("show configuration protocols mpls interface " + interface)
+    print(mpls_output)
+
+    print("show rsvp interface " + interface + ".0")
+    print(rsvp_output)
+    net_connect.disconnect()

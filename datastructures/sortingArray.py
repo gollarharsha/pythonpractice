@@ -1,3 +1,17 @@
+#bubble sort using while loop
+def while_bubble_sort(lst):
+  l = len(lst)-1
+  sorted= False
+  while not sorted:
+    sorted=True
+    for a in range(0,l):
+      if lst[a]>lst[a+1]: # If first element is greater than second element
+        sorted = False
+        lst[a],lst[a+1]=lst[a+1] ,lst[a]
+  return lst
+
+
+
 import unittest
 import random
 def mergeSort(lst):
